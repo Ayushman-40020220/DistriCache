@@ -1,0 +1,250 @@
+{
+  "info": {
+    "name": "DistriCache - Gateway, Rate Limiter & Semantic LLM Cache",
+    "_postman_id": "districache-portfolio-collection-v2",
+    "description": "Production test suite for DistriCache API Gateway, Atomic Sliding-Window Rate Limiter, Circuit Breaker State Machine, FAISS Semantic Cache Engine, and Async Vector Invalidation.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "gateway_url", "value": "http://localhost:8080", "type": "string" },
+    { "key": "semantic_cache_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "mock_service_url", "value": "http://localhost:8001", "type": "string" },
+    { "key": "api_key_pro", "value": "dc_live_testkey_123456789", "type": "string" },
+    { "key": "api_key_free", "value": "dc_free_demo_key", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Gateway Diagnostics & Routes",
+      "item": [
+        {
+          "name": "Gateway Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/health"
+          }
+        },
+        {
+          "name": "Get Registered Routes",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/admin/routes"
+          }
+        },
+        {
+          "name": "Get Circuit Breaker Statuses",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/admin/circuit-breakers"
+          }
+        },
+        {
+          "name": "Get Active Health Check Targets",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/admin/health-checks"
+          }
+        },
+        {
+          "name": "Trigger Dynamic Routes Reload",
+          "request": {
+            "method": "POST",
+            "url": "{{gateway_url}}/admin/routes/reload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication & Distributed Rate Limiting",
+      "item": [
+        {
+          "name": "Authorized Request (Pro Tier)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-API-Key", "value": "{{api_key_pro}}" }
+            ],
+            "url": "{{gateway_url}}/api/v1/mock/products"
+          }
+        },
+        {
+          "name": "Unauthorized Request (Missing Key)",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/api/v1/mock/products"
+          }
+        },
+        {
+          "name": "Forbidden Request (Invalid Key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-API-Key", "value": "invalid_api_key_403" }
+            ],
+            "url": "{{gateway_url}}/api/v1/mock/products"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Semantic LLM Query Cache",
+      "item": [
+        {
+          "name": "1. Cold Query (Expect Cache MISS & Downstream ~800ms)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key_pro}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"How does distributed rate limiting work with Redis?\"\n}"
+            },
+            "url": "{{gateway_url}}/api/v1/llm/query"
+          }
+        },
+        {
+          "name": "2. Identical Query (Expect Cache HIT & Sub-5ms)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key_pro}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"How does distributed rate limiting work with Redis?\"\n}"
+            },
+            "url": "{{gateway_url}}/api/v1/llm/query"
+          }
+        },
+        {
+          "name": "3. Semantically Similar Query (Expect Cache HIT >= 0.95)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "{{api_key_pro}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"query\": \"How does Redis handle distributed rate limiting?\"\n}"
+            },
+            "url": "{{gateway_url}}/api/v1/llm/query"
+          }
+        },
+        {
+          "name": "4. Check Semantic Cache Statistics",
+          "request": {
+            "method": "GET",
+            "url": "{{semantic_cache_url}}/cache/stats"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Circuit Breaker Resilience & Fault Injection",
+      "item": [
+        {
+          "name": "Get Mock Service Configuration",
+          "request": {
+            "method": "GET",
+            "url": "{{mock_service_url}}/mock/config"
+          }
+        },
+        {
+          "name": "Inject Downstream Failure (Enable 100% 500s)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fail_on_demand\": true,\n  \"latency_ms\": 50\n}"
+            },
+            "url": "{{mock_service_url}}/mock/config"
+          }
+        },
+        {
+          "name": "Trigger Degraded Call (Will trip circuit)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-API-Key", "value": "{{api_key_pro}}" }
+            ],
+            "url": "{{gateway_url}}/api/v1/mock/products"
+          }
+        },
+        {
+          "name": "Check Tripped Circuit Breaker (OPEN state)",
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/admin/circuit-breakers"
+          }
+        },
+        {
+          "name": "Restore Downstream Target (Disable failures)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fail_on_demand\": false,\n  \"latency_ms\": 800\n}"
+            },
+            "url": "{{mock_service_url}}/mock/config"
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Async Vector Eviction & Cache Management",
+      "item": [
+        {
+          "name": "List All Cached Entries",
+          "request": {
+            "method": "GET",
+            "url": "{{semantic_cache_url}}/cache/entries"
+          }
+        },
+        {
+          "name": "Invalidate Cache by Pattern",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pattern\": \"*Redis*\"\n}"
+            },
+            "url": "{{semantic_cache_url}}/cache/invalidate/pattern"
+          }
+        },
+        {
+          "name": "Invalidate Cache by Age",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"max_age_seconds\": 3600\n}"
+            },
+            "url": "{{semantic_cache_url}}/cache/invalidate/age"
+          }
+        },
+        {
+          "name": "Clear Entire FAISS & Redis Cache",
+          "request": {
+            "method": "POST",
+            "url": "{{semantic_cache_url}}/cache/clear"
+          }
+        }
+      ]
+    }
+  ]
+}

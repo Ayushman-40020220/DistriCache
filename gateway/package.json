@@ -1,0 +1,25 @@
+{
+  "name": "districache-gateway",
+  "version": "1.0.0",
+  "description": "DistriCache High-Throughput Reverse Proxy, Distributed Rate Limiter & Gateway",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "http-proxy": "^1.18.1",
+    "ioredis": "^5.4.2",
+    "pg": "^8.13.1",
+    "uuid": "^11.0.5",
+    "winston": "^3.17.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
