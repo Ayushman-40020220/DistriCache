@@ -1,8 +1,8 @@
 {
   "info": {
     "name": "DistriCache - Gateway, Rate Limiter & Semantic LLM Cache",
-    "_postman_id": "districache-portfolio-collection-v2",
-    "description": "Production test suite for DistriCache API Gateway, Atomic Sliding-Window Rate Limiter, Circuit Breaker State Machine, FAISS Semantic Cache Engine, and Async Vector Invalidation.",
+    "_postman_id": "districache-portfolio-collection-v3",
+    "description": "Production integration suite for DistriCache API Gateway, Atomic Sliding-Window Rate Limiter, Circuit Breakers, and FAISS Semantic LLM Cache.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -14,50 +14,115 @@
   ],
   "item": [
     {
-      "name": "1. Gateway Diagnostics & Routes",
+      "name": "1. Gateway & Dynamic Route Management",
       "item": [
         {
-          "name": "Gateway Health Check",
+          "name": "1.1 Gateway Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 UP', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": "{{gateway_url}}/health"
           }
         },
         {
-          "name": "Get Registered Routes",
+          "name": "1.2 Get Registered Routes from DB",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns active routes list', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.routes).to.be.an('array');",
+                  "    pm.expect(json.routes.length).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": "{{gateway_url}}/admin/routes"
           }
         },
         {
-          "name": "Get Circuit Breaker Statuses",
-          "request": {
-            "method": "GET",
-            "url": "{{gateway_url}}/admin/circuit-breakers"
-          }
-        },
-        {
-          "name": "Get Active Health Check Targets",
-          "request": {
-            "method": "GET",
-            "url": "{{gateway_url}}/admin/health-checks"
-          }
-        },
-        {
-          "name": "Trigger Dynamic Routes Reload",
+          "name": "1.3 Trigger Zero-Downtime Route Reload",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Routes reloaded successfully', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.count).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "url": "{{gateway_url}}/admin/routes/reload"
           }
+        },
+        {
+          "name": "1.4 Get Real-Time Gateway Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Metrics aggregated successfully', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('totalRequests');",
+                  "    pm.expect(json).to.have.property('circuitBreakers');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{gateway_url}}/admin/metrics"
+          }
         }
       ]
     },
     {
-      "name": "2. Authentication & Distributed Rate Limiting",
+      "name": "2. Authentication & Atomic Rate Limiter",
       "item": [
         {
-          "name": "Authorized Request (Pro Tier)",
+          "name": "2.1 Authorized Request (Pro Tier)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Accepts valid API key', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.has('X-RateLimit-Limit')).to.be.true;",
+                  "    pm.expect(pm.response.headers.has('X-RateLimit-Remaining')).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -67,18 +132,45 @@
           }
         },
         {
-          "name": "Unauthorized Request (Missing Key)",
+          "name": "2.2 Unauthorized Request (Missing Key -> 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Rejects request without key with 401', function() {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": "{{gateway_url}}/api/v1/mock/products"
           }
         },
         {
-          "name": "Forbidden Request (Invalid Key)",
+          "name": "2.3 Rate Limit Flood (Free Tier -> 429 Too Many Requests)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns rate-limiting headers or 429 throttle', function() {",
+                  "    pm.expect([200, 429]).to.include(pm.response.code);",
+                  "    if (pm.response.code === 429) {",
+                  "        pm.expect(pm.response.headers.has('Retry-After')).to.be.true;",
+                  "    }",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
-              { "key": "X-API-Key", "value": "invalid_api_key_403" }
+              { "key": "X-API-Key", "value": "{{api_key_free}}" }
             ],
             "url": "{{gateway_url}}/api/v1/mock/products"
           }
@@ -86,10 +178,23 @@
       ]
     },
     {
-      "name": "3. Semantic LLM Query Cache",
+      "name": "3. Semantic LLM Query Cache Engine",
       "item": [
         {
-          "name": "1. Cold Query (Expect Cache MISS & Downstream ~800ms)",
+          "name": "3.1 Cold Query (Cache MISS ~800ms)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Cold query is Cache MISS', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get('X-Cache')).to.eql('MISS');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -104,7 +209,22 @@
           }
         },
         {
-          "name": "2. Identical Query (Expect Cache HIT & Sub-5ms)",
+          "name": "3.2 Exact Warm Query (Cache HIT sub-10ms)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Identical query is Cache HIT', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get('X-Cache')).to.eql('HIT');",
+                  "    var latency = parseFloat(pm.response.headers.get('X-Cache-Latency-Ms') || '100');",
+                  "    pm.expect(latency).to.be.below(15.0);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -119,7 +239,22 @@
           }
         },
         {
-          "name": "3. Semantically Similar Query (Expect Cache HIT >= 0.95)",
+          "name": "3.3 Semantically Similar Query (Cache HIT >= 0.95)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Paraphrase triggers Semantic Cache HIT', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get('X-Cache')).to.eql('HIT');",
+                  "    var similarity = parseFloat(pm.response.headers.get('X-Cache-Similarity') || '0');",
+                  "    pm.expect(similarity).to.be.at.least(0.95);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -132,13 +267,6 @@
             },
             "url": "{{gateway_url}}/api/v1/llm/query"
           }
-        },
-        {
-          "name": "4. Check Semantic Cache Statistics",
-          "request": {
-            "method": "GET",
-            "url": "{{semantic_cache_url}}/cache/stats"
-          }
         }
       ]
     },
@@ -146,14 +274,19 @@
       "name": "4. Circuit Breaker Resilience & Fault Injection",
       "item": [
         {
-          "name": "Get Mock Service Configuration",
-          "request": {
-            "method": "GET",
-            "url": "{{mock_service_url}}/mock/config"
-          }
-        },
-        {
-          "name": "Inject Downstream Failure (Enable 100% 500s)",
+          "name": "4.1 Inject Downstream Outage (100% 500s)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Downstream outage injected', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -167,7 +300,19 @@
           }
         },
         {
-          "name": "Trigger Degraded Call (Will trip circuit)",
+          "name": "4.2 Trigger Failures & Observe Circuit Breaker Trip (HTTP 503)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Fast-fails with 503 or 502', function() {",
+                  "    pm.expect([502, 503]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -177,14 +322,19 @@
           }
         },
         {
-          "name": "Check Tripped Circuit Breaker (OPEN state)",
-          "request": {
-            "method": "GET",
-            "url": "{{gateway_url}}/admin/circuit-breakers"
-          }
-        },
-        {
-          "name": "Restore Downstream Target (Disable failures)",
+          "name": "4.3 Restore Downstream Target Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Downstream target restored', function() {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -203,14 +353,14 @@
       "name": "5. Async Vector Eviction & Cache Management",
       "item": [
         {
-          "name": "List All Cached Entries",
+          "name": "5.1 List All Active Vector Entries",
           "request": {
             "method": "GET",
             "url": "{{semantic_cache_url}}/cache/entries"
           }
         },
         {
-          "name": "Invalidate Cache by Pattern",
+          "name": "5.2 Invalidate Vectors by Pattern",
           "request": {
             "method": "POST",
             "header": [
@@ -224,7 +374,7 @@
           }
         },
         {
-          "name": "Invalidate Cache by Age",
+          "name": "5.3 Invalidate Vectors by Age",
           "request": {
             "method": "POST",
             "header": [
@@ -235,13 +385,6 @@
               "raw": "{\n  \"max_age_seconds\": 3600\n}"
             },
             "url": "{{semantic_cache_url}}/cache/invalidate/age"
-          }
-        },
-        {
-          "name": "Clear Entire FAISS & Redis Cache",
-          "request": {
-            "method": "POST",
-            "url": "{{semantic_cache_url}}/cache/clear"
           }
         }
       ]

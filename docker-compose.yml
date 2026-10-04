@@ -160,6 +160,23 @@ services:
     profiles:
       - benchmarks
 
+  # ---------------------------------------------------------------------------
+  # 7. Real-Time React Observability Dashboard (client/)
+  # ---------------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: districache-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - districache-net
+    depends_on:
+      gateway:
+        condition: service_healthy
+
 networks:
   districache-net:
     driver: bridge
@@ -168,3 +185,4 @@ volumes:
   pgdata:
   redisdata:
   faissdata:
+
