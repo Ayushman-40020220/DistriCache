@@ -148,8 +148,8 @@ DistriCache/
 
 ### 1. Clone & Configure
 ```bash
-git clone https://github.com/your-username/districache.git
-cd districache
+git clone https://github.com/Ayushman-40020220/DistriCache.git
+cd DistriCache
 cp .env.example .env
 ```
 
